@@ -10,8 +10,8 @@ import { currentSettings as userSettings } from 'scripts/settings/userSettings';
 import type { PlayerState } from 'types/playbackStopInfo';
 import type { Event } from 'utils/events';
 
-import { getMediaSegmentAction } from './mediaSegmentSettings';
-import { findCurrentSegment } from './mediaSegments';
+import { getMediaSegmentAction, getMediaSegmentSkipMargin } from './mediaSegmentSettings';
+import { findCurrentSegment, withSkipMargin } from './mediaSegments';
 import { PlaybackSubscriber } from './playbackSubscriber';
 import { MediaSegmentAction } from '../constants/mediaSegmentAction';
 
@@ -27,7 +27,15 @@ class MediaSegmentManager extends PlaybackSubscriber {
         try {
             const { data: mediaSegments } = await getMediaSegmentApi(api)
                 .getItemSegments({ itemId, includeSegmentTypes });
-            this.mediaSegments = mediaSegments.Items || [];
+            this.mediaSegments = (mediaSegments.Items || []).flatMap((segment: MediaSegmentDto): MediaSegmentDto[] => {
+                if (!segment.Type || this.mediaSegmentTypeActions?.[segment.Type] !== MediaSegmentAction.Skip) {
+                    return [segment];
+                }
+
+                const skipWindow: MediaSegmentDto | undefined = withSkipMargin(
+                    segment, getMediaSegmentSkipMargin(userSettings, segment.Type));
+                return skipWindow ? [skipWindow] : [];
+            });
         } catch (err) {
             console.error('[MediaSegmentManager] failed to fetch segments', err);
             this.mediaSegments = [];
@@ -84,6 +92,7 @@ class MediaSegmentManager extends PlaybackSubscriber {
         this.isLastSegmentIgnored = false;
         this.lastSegmentIndex = 0;
         this.lastTime = -1;
+        this.mediaSegments = [];
         this.hasSegments = !!state.MediaSource?.HasSegments;
 
         const itemId = state.MediaSource?.Id;

@@ -2,7 +2,7 @@ import { MediaSegmentType } from '@jellyfin/sdk/lib/generated-client/models/medi
 import escapeHTML from 'escape-html';
 
 import { MediaSegmentAction } from 'apps/legacy/features/playback/constants/mediaSegmentAction';
-import { getId, getMediaSegmentAction } from 'apps/legacy/features/playback/utils/mediaSegmentSettings';
+import { getId, getMarginId, getMediaSegmentAction, getMediaSegmentSkipMargin } from 'apps/legacy/features/playback/utils/mediaSegmentSettings';
 import { pluginManager } from 'components/pluginManager';
 import { AppFeature } from 'constants/appFeature';
 import { PluginType } from 'constants/pluginType';
@@ -23,6 +23,7 @@ import template from './playbackSettings.template.html';
 
 import '../../elements/emby-select/emby-select';
 import '../../elements/emby-checkbox/emby-checkbox';
+import '../../elements/emby-input/emby-input';
 
 function fillSkipLengths(select) {
     const options = [5, 10, 15, 20, 25, 30];
@@ -71,11 +72,17 @@ function populateMediaSegments(container, userSettings) {
     ].map(segmentType => {
         const segmentTypeLabel = globalize.translate('LabelMediaSegmentsType', globalize.translate(`MediaSegmentType.${segmentType}`));
         const id = getId(segmentType);
+        const marginId = getMarginId(segmentType);
         selectedValues[id] = getMediaSegmentAction(userSettings, segmentType);
+        selectedValues[marginId] = getMediaSegmentSkipMargin(userSettings, segmentType);
         return `<div class="selectContainer">
 <select is="emby-select" id="${id}" class="segmentTypeAction" label="${segmentTypeLabel}">
     ${actionOptions}
 </select>
+</div>
+<div class="inputContainer">
+    <input is="emby-input" type="number" id="${marginId}" class="segmentTypeSkipMargin" min="0" step="0.1" required label="${globalize.translate('LabelMediaSegmentSkipMargin')}" aria-describedby="${marginId}Help" />
+    <div id="${marginId}Help" class="fieldDescription">${globalize.translate('MediaSegmentSkipMarginHelp')}</div>
 </div>`;
     }).join('');
 
@@ -339,9 +346,9 @@ function saveUser(context, user, userSettingsInstance, apiClient) {
     userSettingsInstance.skipForwardLength(context.querySelector('.selectSkipForwardLength').value);
     userSettingsInstance.skipBackLength(context.querySelector('.selectSkipBackLength').value);
 
-    const segmentTypeActions = context.querySelectorAll('.segmentTypeAction') || [];
-    Array.prototype.forEach.call(segmentTypeActions, actionEl => {
-        userSettingsInstance.set(actionEl.id, actionEl.value, false);
+    const segmentSettings = context.querySelectorAll('.segmentTypeAction, .segmentTypeSkipMargin');
+    Array.prototype.forEach.call(segmentSettings, field => {
+        userSettingsInstance.set(field.id, field.value, false);
     });
 
     return apiClient.updateUserConfiguration(user.Id, user.Configuration);

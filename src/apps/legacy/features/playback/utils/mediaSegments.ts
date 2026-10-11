@@ -1,5 +1,22 @@
 import type { MediaSegmentDto } from '@jellyfin/sdk/lib/generated-client/models/media-segment-dto';
 
+import { TICKS_PER_SECOND } from 'constants/time';
+
+// Shrink only the client's auto-skip window; keep detected timestamps intact.
+export function withSkipMargin(segment: MediaSegmentDto, seconds: number): MediaSegmentDto | undefined {
+    if (seconds <= 0 || segment.StartTicks === undefined || segment.EndTicks === undefined) {
+        return segment;
+    }
+
+    const marginTicks: number = seconds * TICKS_PER_SECOND;
+    const startTicks: number = segment.StartTicks + marginTicks;
+    const endTicks: number = segment.EndTicks - marginTicks;
+
+    if (endTicks - startTicks < TICKS_PER_SECOND) return undefined;
+
+    return { ...segment, StartTicks: startTicks, EndTicks: endTicks };
+}
+
 const isBeforeSegment = (segment: MediaSegmentDto, time: number, direction: number) => {
     if (direction === -1) {
         return (

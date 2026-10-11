@@ -2,7 +2,9 @@ import type { MediaSegmentDto } from '@jellyfin/sdk/lib/generated-client/models/
 import { MediaSegmentType } from '@jellyfin/sdk/lib/generated-client/models/media-segment-type';
 import { describe, expect, it } from 'vitest';
 
-import { findCurrentSegment } from './mediaSegments';
+import { TICKS_PER_SECOND } from 'constants/time';
+
+import { findCurrentSegment, withSkipMargin } from './mediaSegments';
 
 const TEST_SEGMENTS: MediaSegmentDto[] = [
     {
@@ -36,6 +38,46 @@ const TEST_SEGMENTS: MediaSegmentDto[] = [
         EndTicks: 60
     }
 ];
+
+describe('withSkipMargin()', () => {
+    const intro: MediaSegmentDto = {
+        Type: MediaSegmentType.Intro,
+        StartTicks: 0,
+        EndTicks: 10 * TICKS_PER_SECOND
+    };
+
+    it('keeps the beginning and end without changing detected timestamps', () => {
+        const window: MediaSegmentDto | undefined = withSkipMargin(intro, 1);
+        expect(window?.StartTicks).toBe(TICKS_PER_SECOND);
+        expect(window?.EndTicks).toBe(9 * TICKS_PER_SECOND);
+        expect(intro.StartTicks).toBe(0);
+        expect(intro.EndTicks).toBe(10 * TICKS_PER_SECOND);
+    });
+
+    it('does not select either retained edge for another skip', () => {
+        const window: MediaSegmentDto | undefined = withSkipMargin(intro, 1);
+        expect(window).toBeDefined();
+        if (!window) throw new Error('Expected a skip window');
+
+        expect(findCurrentSegment([window], 0.5 * TICKS_PER_SECOND)).toBeUndefined();
+        expect(findCurrentSegment([window], TICKS_PER_SECOND)).toBeDefined();
+        expect(findCurrentSegment([window], 9 * TICKS_PER_SECOND)).toBeUndefined();
+    });
+
+    it('preserves the existing behavior when the margin is zero', () => {
+        expect(withSkipMargin(intro, 0)).toBe(intro);
+    });
+
+    it('supports fractional seconds', () => {
+        expect(withSkipMargin(intro, 0.5)?.StartTicks).toBe(TICKS_PER_SECOND / 2);
+    });
+
+    it('leaves short segments playing instead of seeking backwards', () => {
+        expect(withSkipMargin(intro, 5)).toBeUndefined();
+        expect(withSkipMargin(intro, 4.6)).toBeUndefined();
+        expect(withSkipMargin(intro, 4.5)).toBeDefined();
+    });
+});
 
 describe('findCurrentSegment()', () => {
     it('Should return the current segment', () => {
